@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI ARCHITECT: ULTIMATE EDITION</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* FONTS */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --neon-green: #33ff33;
+            --neon-red: #ff3333;
+            --neon-blue: #33ffff;
+            --neon-yellow: #ffff33;
+            --bg-color: #050505;
+            --panel-bg: #111;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--neon-green);
+            font-family: 'VT323', monospace; /* Default readable font */
+            overflow: hidden;
+            touch-action: none; /* Prevent zoom/scroll on game */
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* TYPOGRAPHY */
+        h1, h2, .pixel-font { font-family: 'Press Start 2P', cursive; }
+        .readable-text { font-family: 'VT323', monospace; font-size: 1.4rem; line-height: 1.2; }
+        .glow-text { text-shadow: 0 0 5px currentColor; }
+
+        /* UI COMPONENTS */
+        .pixel-box {
+            border: 4px solid var(--neon-green);
+            background: var(--panel-bg);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            position: relative;
+        }
+        
+        .pixel-btn {
+            background: #222;
+            border: 2px solid var(--neon-green);
+            color: var(--neon-green);
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.1s;
+            text-transform: uppercase;
+            padding: 15px;
+            text-align: center;
+        }
+        .pixel-btn:active { transform: scale(0.98); background: #333; }
+        .pixel-btn.locked { opacity: 0.5; filter: grayscale(1); pointer-events: none; }
+        
+        .difficulty-btn {
+            border: 2px solid #555; color: #777; padding: 10px; font-size: 0.7rem;
+        }
+        .difficulty-btn.selected {
+            border-color: var(--neon-yellow); color: var(--neon-yellow); background: #222;
+            box-shadow: 0 0 10px var(--neon-yellow);
+        }
+
+        /* ANIMATIONS */
+        @keyframes ufo-idle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .ufo-float { animation: ufo-idle 2s infinite ease-in-out; }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .crt-scanline {
+            position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.3) 50%);
+            background-size: 100% 4px;
+            pointer-events: none; z-index: 50;
+        }
+
+        /* STATIC NOISE (Damage Effect) */
+        .static-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E");
+        }
+        .static-hit { animation: flash-static 0.3s steps(4); }
+        @keyframes flash-static { 0% { opacity: 0; } 50% { opacity: 0.6; transform: scale(1.05); } 100% { opacity: 0; } }
+
+        /* ARCADE GAME */
+        #arcade-container { position: relative; width: 100%; max-width: 400px; height: 300px; margin: 0 auto; border: 4px solid var(--neon-blue); overflow: hidden; background: #000; }
+        canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+        /* MATCHING GAME */
+        .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100%; }
+        .match-card {
+            border: 2px solid #555; padding: 10px; 
+            display: flex; align-items: center; justify-content: center; text-align: center;
+            font-size: 1.1rem; cursor: pointer; background: #1a1a1a;
+            transition: all 0.2s;
+        }
+        .match-card.selected { border-color: var(--neon-blue); background: #002233; color: white; }
+        .match-card.matched { border-color: var(--neon-green); background: #003300; opacity: 0.5; pointer-events: none; }
+        .match-card.wrong { border-color: var(--neon-red); background: #330000; animation: shake 0.3s; }
+        
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+    </style>
+</head>
+<body class="p-2 md:p-6">
+
+    <div class="crt-scanline"></div>
+    <div id="static-fx" class="static-overlay"></div>
+
+    <!-- AUDIO BTN -->
+    <button id="audio-btn" onclick="toggleAudio()" class="fixed top-3 right-3 z-50 border border-green-500 text-green-500 px-2 py-1 text-xs font-mono bg-black hover:bg-green-900">
+        SES: OFF
+    </button>
+
+    <!-- === SCREEN 0: START === -->
+    <div id="screen-start" class="flex flex-col h-full w-full max-w-2xl mx-auto justify-between py-4">
+        
+        <div class="flex-1 flex flex-col items-center justify-center text-center">
+            <!-- 8-BIT ALIEN UFO -->
+            <div class="ufo-float mb-6 w-40 h-24 relative">
+                <svg viewBox="0 0 100 60" class="w-full h-full drop-shadow-[0_0_15px_rgba(50,255,50,0.6)]">
+                    <path d="M30 15 Q50 0 70 15" stroke="#0ff" stroke-width="2" fill="rgba(0,255,255,0.2)"/> <!-- Dome -->
+                    <rect x="20" y="25" width="60" height="12" rx="2" fill="#222" stroke="#0f0" stroke-width="2"/> <!-- Body -->
+                    <circle cx="25" cy="31" r="2" fill="red" class="animate-pulse"/>
+                    <circle cx="50" cy="31" r="2" fill="yellow" class="animate-pulse" style="animation-delay:0.2s"/>
+                    <circle cx="75" cy="31" r="2" fill="blue" class="animate-pulse" style="animation-delay:0.4s"/>
+                    <path d="M10 37 L90 37 L80 45 L20 45 Z" fill="#0b0"/> <!-- Base -->
+                </svg>
+            </div>
+
+            <h1 class="text-3xl md:text-5xl text-green-400 mb-2 leading-tight glow-text">AI ARCHITECT</h1>
+            <p class="text-blue-400 text-sm pixel-font mb-6 tracking-widest">ULTIMATE EDITION</p>
+
+            <!-- TABS -->
+            <div class="w-full border-b border-gray-700 mb-4 flex justify-center gap-6 pixel-font text-[10px] md:text-xs">
+                <button onclick="setTab('info')" id="tab-info" class="text-green-400 border-b-2 border-green-400 pb-1">GÖREV</button>
+                <button onclick="setTab('rules')" id="tab-rules" class="text-gray-500 pb-1 hover:text-white">KURALLAR</button>
+            </div>
+
+            <div class="pixel-box w-full p-4 mb-4 text-left h-32 overflow-y-auto">
+                <div id="content-info" class="readable-text text-gray-300">
+                    > SİSTEM YIL: 2049<br>
+                    > GÖREV: AI Ajansı'nı yönetmek.<br>
+                    > HEDEF: %100 Bütünlük.<br>
+                    > UYARI: Kararların geleceği şekillendirecek.
+                </div>
+                <div id="content-rules" class="readable-text text-gray-300 hidden">
+                    1. EĞİTİM: Terimleri öğren.<br>
+                    2. SİMÜLASYON: Yanlış cevap = Bütünlük Kaybı.<br>
+                    3. DATA RUNNER: Engelleri aş, veri topla.<br>
+                    4. EŞLEŞTİRME: Nöral ağları bağla.
+                </div>
+            </div>
+
+            <!-- DIFFICULTY & INPUT -->
+            <div class="w-full grid grid-cols-3 gap-2 mb-4 pixel-font">
+                <button onclick="setDifficulty('easy')" id="diff-easy" class="difficulty-btn">KOLAY</button>
+                <button onclick="setDifficulty('normal')" id="diff-normal" class="difficulty-btn selected">NORMAL</button>
+                <button onclick="setDifficulty('hard')" id="diff-hard" class="difficulty-btn">HARDCORE</button>
+            </div>
+
+            <input type="text" id="player-name" placeholder="KOD ADI GİRİN" class="w-full bg-black border-2 border-green-700 p-3 text-center text-green-400 text-xl font-mono uppercase focus:border-green-400 outline-none mb-4">
+
+            <button onclick="startGame()" class="pixel-btn w-full animate-bounce">
+                BAĞLANTIYI KUR [START]
+            </button>
+        </div>
+
+        <div class="text-center text-[10px] text-gray-600 pt-4 font-mono ctod-brand">
+            SYSTEM ARCHITECT: <a href="https://ctod.tr" class="text-gray-500 hover:text-white underline decoration-dotted">CtoD</a>
+        </div>
+    </div>
+
+    <!-- === SCREEN 1: TRAINING === -->
+    <div id="screen-train" class="hidden h-full flex-col justify-center items-center max-w-2xl mx-auto w-full">
+        <h2 class="pixel-font text-xs text-blue-400 mb-4 text-center">MODÜL 1: VERİ YÜKLEMESİ</h2>
+        
+        <div class="pixel-box p-6 w-full text-center min-h-[300px] flex flex-col justify-center relative">
+            <h3 id="train-term" class="text-3xl text-green-400 font-bold mb-4 pixel-font">...</h3>
+            <p id="train-def" class="readable-text text-white mb-8">...</p>
+            
+            <div class="flex justify-between items-center w-full mt-auto">
+                <span class="text-xs text-gray-500 pixel-font">VERİ: <span id="train-idx">1</span>/5</span>
+                <button onclick="nextTrain()" class="pixel-btn px-6">DEVAM >></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- === SCREEN 2: QUIZ === -->
+    <div id="screen-quiz" class="hidden h-full flex-col max-w-3xl mx-auto w-full">
+        <!-- HUD -->
+        <div class="flex justify-between items-end border-b-4 border-[#222] pb-2 mb-4 bg-[#111] p-2">
+            <div>
+                <span class="text-[10px] text-gray-500 block pixel-font">OPERATÖR</span>
+                <span id="hud-name" class="text-sm text-blue-400 uppercase font-bold">...</span>
+            </div>
+            <div class="flex-1 px-4">
+                <div class="flex justify-between text-[10px] text-gray-500 mb-1 pixel-font">
+                    <span>BÜTÜNLÜK (HP)</span>
+                    <span id="hp-val">100%</span>
+                </div>
+                <div class="w-full h-4 bg-gray-900 border border-gray-600 relative overflow-hidden">
+                    <div id="hp-bar" class="h-full bg-green-500 w-full transition-all duration-300"></div>
+                </div>
+            </div>
+            <div class="text-center">
+                <span class="text-[10px] text-gray-500 block pixel-font">SORU</span>
+                <span id="q-idx" class="text-xl">1</span><span class="text-xs text-gray-600">/10</span>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col gap-4 overflow-y-auto pb-4">
+            <div class="pixel-box p-6 bg-[#0a0a0a] relative">
+                <span id="q-role" class="absolute top-0 right-0 bg-blue-900 text-blue-200 text-[10px] px-2 py-1 pixel-font">ROL</span>
+                <p id="q-text" class="readable-text text-lg md:text-2xl text-white leading-relaxed">...</p>
+            </div>
+
+            <div class="flex flex-col gap-3 mt-auto">
+                <button onclick="answer(0)" id="opt-0" class="pixel-box p-4 text-left readable-text hover:bg-[#111] transition-colors border-2 border-green-900 text-green-300 active:bg-green-900"></button>
+                <button onclick="answer(1)" id="opt-1" class="pixel-box p-4 text-left readable-text hover:bg-[#111] transition-colors border-2 border-green-900 text-green-300 active:bg-green-900"></button>
+                <button onclick="answer(2)" id="opt-2" class="pixel-box p-4 text-left readable-text hover:bg-[#111] transition-colors border-2 border-green-900 text-green-300 active:bg-green-900"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- === SCREEN 3: ARCADE (DATA RUNNER) === -->
+    <div id="screen-arcade" class="hidden h-full flex-col justify-center items-center w-full max-w-lg mx-auto">
+        <h2 class="pixel-font text-xs text-red-500 mb-2 animate-pulse text-center">GÜVENLİK DUVARI İHLALİ!</h2>
+        <p class="text-center text-gray-400 readable-text mb-4 text-sm">Ekrana dokunarak zıpla. Kırmızı duvarlardan kaç, mavi verileri topla.</p>
+        
+        <div id="arcade-container">
+            <canvas id="gameCanvas" width="400" height="300"></canvas>
+            <div id="arcade-start-overlay" class="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+                <button onclick="startArcade()" class="pixel-btn animate-pulse">BAŞLAT [TAP]</button>
+            </div>
+            <div class="absolute top-2 left-2 pixel-font text-white text-xs drop-shadow-md">
+                VERİ: <span id="arcade-score">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- === SCREEN 4: MATCHING === -->
+    <div id="screen-match" class="hidden h-full flex-col max-w-3xl mx-auto w-full">
+        <h2 class="pixel-font text-center text-blue-400 mb-2 text-xs">SİSTEM KALİBRASYONU</h2>
+        <p class="text-center text-gray-500 mb-4 text-[10px]">TERİM ve TANIMI EŞLEŞTİR</p>
+        
+        <div id="match-area" class="match-grid flex-1 overflow-y-auto">
+            <!-- Cards injected here -->
+        </div>
+    </div>
+
+    <!-- === SCREEN 5: CERTIFICATE === -->
+    <div id="screen-cert" class="hidden h-full flex-col justify-center items-center max-w-2xl mx-auto w-full p-4">
+        <div class="pixel-box w-full p-6 text-center bg-[#080808] relative overflow-hidden">
+            <!-- BG Pattern -->
+            <div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(circle, #0f0 1px, transparent 1px); background-size: 20px 20px;"></div>
+            
+            <div class="relative z-10">
+                <div class="border-b-4 border-double border-green-900 pb-4 mb-6">
+                    <h1 class="text-2xl md:text-4xl text-white pixel-font mb-2">SERTİFİKA</h1>
+                    <p class="text-[10px] tracking-[0.5em] text-gray-500 pixel-font">CTOD AI AGENCY</p>
+                </div>
+
+                <div class="ufo-float w-16 h-8 mx-auto mb-6 opacity-80">
+                    <svg viewBox="0 0 100 60"><path d="M30 15 Q50 0 70 15" fill="#0ff"/><rect x="20" y="25" width="60" height="12" fill="#222" stroke="#0f0"/><path d="M10 37 L90 37 L80 45 L20 45 Z" fill="#0b0"/></svg>
+                </div>
+
+                <p class="text-xs text-gray-500 pixel-font mb-1">OPERATÖR KİMLİĞİ:</p>
+                <h2 id="cert-name" class="text-2xl text-green-400 mb-6 font-mono uppercase tracking-wider">...</h2>
+
+                <div class="grid grid-cols-2 gap-4 mb-6 border-t border-b border-gray-800 py-4">
+                    <div>
+                        <p class="text-[10px] text-gray-500 pixel-font">BAŞARI</p>
+                        <p id="cert-score" class="text-3xl text-white font-bold">0%</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-500 pixel-font">RÜTBE</p>
+                        <p id="cert-rank" class="text-sm text-blue-400 mt-2 font-bold pixel-font">...</p>
+                    </div>
+                </div>
+
+                <p id="cert-msg" class="text-xs text-gray-400 readable-text leading-relaxed">...</p>
+                
+                <div class="mt-6 pt-4 border-t border-gray-800 flex justify-between text-[8px] font-mono text-gray-600">
+                    <span>HASH: <span id="cert-hash">...</span></span>
+                    <a href="https://ctod.tr" class="hover:text-white transition-colors">[ DESIGNED BY CtoD ]</a>
+                </div>
+            </div>
+        </div>
+        <button onclick="location.reload()" class="mt-6 pixel-btn w-full max-w-xs">SİSTEMİ YENİDEN BAŞLAT</button>
+    </div>
+
+    <script>
+        /* --- GAME CONFIG & STATE --- */
+        const GAME = {
+            name: "",
+            difficulty: "normal",
+            score: { quiz: 0, arcade: 0, match: 0 },
+            maxScore: { quiz: 100, arcade: 50, match: 40 }, // Weighted
+            hp: 100,
+            qIdx: 0,
+            trainIdx: 0,
+            audio: false,
+            voice: null
+        };
+
+        const DIFFICULTY = {
+            easy: { hpLoss: 10, arcadeSpeed: 3, arcadeGoal: 5 },
+            normal: { hpLoss: 20, arcadeSpeed: 5, arcadeGoal: 10 },
+            hard: { hpLoss: 50, arcadeSpeed: 8, arcadeGoal: 15 }
+        };
+
+        /* --- AUDIO & HAPTICS ENGINE (SYNTH) --- */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function toggleAudio() {
+            GAME.audio = !GAME.audio;
+            document.getElementById('audio-btn').innerText = GAME.audio ? "SES: ON" : "SES: OFF";
+            document.getElementById('audio-btn').classList.toggle('bg-green-900');
+            if(GAME.audio && audioCtx.state === 'suspended') audioCtx.resume();
+            if(GAME.audio) playSound('start');
+        }
+
+        function playSound(type) {
+            if (!GAME.audio) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            
+            if (type === 'start') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'jump') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'collect') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1000, now);
+                osc.frequency.setValueAtTime(1500, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'hit' || type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+                vibrate(200); // Heavy Vibration
+            } else if (type === 'correct') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(880, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            }
+        }
+
+        function vibrate(ms) {
+            if (navigator.vibrate) navigator.vibrate(ms);
+        }
+
+        /* --- TTS ENGINE --- */
+        function loadVoices() {
+            const voices = window.speechSynthesis.getVoices();
+            GAME.voice = voices.find(v => v.name.includes('Google') && v.lang.includes('tr')) || voices.find(v => v.lang.includes('tr'));
+        }
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        function formatSpeech(text) {
+            // Advanced Phonetic Map for Turkish TTS reading English terms
+            return text
+                // Acronyms
+                .replace(/\bAI\b/g, "Ey Ay")
+                .replace(/\bLLM\b/g, "El el em")
+                .replace(/\bCEO\b/g, "Si i o")
+                .replace(/\bAGI\b/g, "Ey ci ay")
+                .replace(/\bNLP\b/g, "En el pi")
+                .replace(/\bGPU\b/g, "Ci pi yu")
+                .replace(/\bGPT\b/g, "Ci pi ti")
+                
+                // Tech Terms
+                .replace(/\bPrompt\b/g, "Prampt")
+                .replace(/\bHallucination\b/g, "Halüsineyşın")
+                .replace(/\bBias\b/g, "Bay es")
+                .replace(/\bDeepfake\b/g, "Dip feyk")
+                .replace(/\bNeuralink\b/g, "Nörolink")
+                .replace(/\bBluetooth\b/g, "Blutut")
+                .replace(/\bChatGPT\b/g, "Çet ci pi ti")
+                .replace(/\bGenerative\b/g, "Ceneratif")
+                .replace(/\bBlack Box\b/g, "Blek Baks")
+                .replace(/\bTuring\b/g, "Tiyuring")
+                .replace(/\bData Runner\b/g, "Deyta Ranır")
+                .replace(/\bCtoD\b/g, "Si ti o di")
+                .replace(/\bTechno-God\b/g, "Tekno Gad")
+                .replace(/\bArchitect\b/g, "Arkitekt")
+                .replace(/\bSaga\b/g, "Saga")
+                .replace(/\bUltimate\b/g, "Altimıt")
+                .replace(/\bEdition\b/g, "Edişın")
+                .replace(/\bDataset\b/g, "Deyta set");
+        }
+
+        function speak(text) {
+            if(!GAME.audio) return;
+            window.speechSynthesis.cancel();
+            
+            const processedText = formatSpeech(text);
+            const u = new SpeechSynthesisUtterance(processedText);
+            u.lang = 'tr-TR';
+            
+            if(GAME.voice) u.voice = GAME.voice;
+            
+            u.rate = 1.1; 
+            u.pitch = 1.0; 
+            
+            window.speechSynthesis.speak(u);
+        }
+
+        /* --- SCREEN MANAGEMENT --- */
+        const screens = ['start', 'train', 'quiz', 'arcade', 'match', 'cert'];
+        function showScreen(id) {
+            screens.forEach(s => document.getElementById(`screen-${s}`).classList.add('hidden'));
+            screens.forEach(s => document.getElementById(`screen-${s}`).classList.remove('flex'));
+            const el = document.getElementById(`screen-${id}`);
+            el.classList.remove('hidden');
+            el.classList.add('flex');
+            window.scrollTo(0,0);
+        }
+
+        /* --- PHASE 0: START --- */
+        function setTab(t) {
+            document.getElementById('content-info').classList.add('hidden');
+            document.getElementById('content-rules').classList.add('hidden');
+            document.getElementById('content-' + t).classList.remove('hidden');
+            document.getElementById('tab-info').classList.remove('text-green-400', 'border-b-2');
+            document.getElementById('tab-rules').classList.remove('text-green-400', 'border-b-2');
+            document.getElementById('tab-rules').classList.add('text-gray-500');
+            document.getElementById('tab-info').classList.add('text-gray-500');
+            
+            document.getElementById('tab-' + t).classList.add('text-green-400', 'border-b-2');
+            document.getElementById('tab-' + t).classList.remove('text-gray-500');
+        }
+
+        function setDifficulty(d) {
+            GAME.difficulty = d;
+            ['easy', 'normal', 'hard'].forEach(x => document.getElementById(`diff-${x}`).classList.remove('selected'));
+            document.getElementById(`diff-${d}`).classList.add('selected');
+        }
+
+        function startGame() {
+            const name = document.getElementById('player-name').value.trim();
+            if(!name) { alert("LÜTFEN KOD ADI GİRİN"); return; }
+            GAME.name = name;
+            showScreen('train');
+            loadTrain(0);
+            speak(`Merhaba ${name}. Eğitim modülü başlatılıyor.`);
+        }
+
+        /* --- PHASE 1: TRAINING --- */
+        const trainingData = [
+            { t: "LLM (Büyük Dil Modeli)", d: "İnsan dilini matematiksel olasılıklarla taklit eden devasa yapay zeka yapılarıdır. GPT, Claude gibi modeller buna örnektir." },
+            { t: "PROMPT (Komut)", d: "AI'a ne yapması gerektiğini söylediğimiz metin girdisidir. Prompt ne kadar netse, sonuç o kadar kalitelidir." },
+            { t: "HALLUCINATION", d: "Yapay zekanın gerçekte olmayan bir bilgiyi, çok emin bir dille uydurması durumudur." },
+            { t: "BIAS (Önyargı)", d: "Eğitim verisindeki insan hatalarının AI modeline geçmesi. Örn: Doktor deyince sadece erkek düşünmesi." },
+            { t: "AGI (Genel YZ)", d: "Henüz ulaşılmamış, insan gibi her türlü zihinsel görevi başarabilen süper zeka seviyesi." }
+        ];
+
+        function loadTrain(idx) {
+            if(idx >= trainingData.length) {
+                showScreen('quiz');
+                initQuiz();
+                return;
+            }
+            GAME.trainIdx = idx;
+            const data = trainingData[idx];
+            document.getElementById('train-term').innerText = data.t;
+            document.getElementById('train-def').innerText = data.d;
+            document.getElementById('train-idx').innerText = idx + 1;
+            speak(data.t + ". " + data.d);
+        }
+        function nextTrain() { loadTrain(GAME.trainIdx + 1); }
+
+        /* --- PHASE 2: QUIZ --- */
+        const questions = [
+            { t: "Bir AI modeli tarihi olayları tamamen yanlış anlatıyor. Bu duruma ne denir?", o: ["Glitch", "Hallucination", "Bug"], a: 1, r: "VERİ ANALİSTİ" },
+            { t: "Yapay zeka işe alımda sürekli belirli bir etnik kökeni eliyor. Sorun nedir?", o: ["Bias (Önyargı)", "Yetersiz RAM", "Algoritma Hızı"], a: 0, r: "ETİK UZMANI" },
+            { t: "CEO'nun sesini taklit eden şüpheli bir arama geldi. Ne yapmalısın?", o: ["Hemen parayı yolla", "Deepfake olabilir, doğrula", "Sesi kaydet"], a: 1, r: "GÜVENLİK" },
+            { t: "AI'dan en iyi sonucu almak için yazdığın girdiye ne ad verilir?", o: ["Script", "Code", "Prompt"], a: 2, r: "PROMPT MÜHENDİSİ" },
+            { t: "Otonom araç kaza anında kimi kurtaracağına nasıl karar verir?", o: ["Rastgele", "Etik Protokollerine Göre", "Yolcuya Göre"], a: 1, r: "ETİK" },
+            { t: "Veri merkezinde sıcaklık kritik seviyede. Öncelikli aksiyon nedir?", o: ["İşlemleri Yavaşlat", "Su Dök", "Kaç"], a: 0, r: "ALTYAPI" },
+            { t: "Hangi teknoloji insan beynini bilgisayara bağlamayı hedefler?", o: ["Neuralink / BCI", "Bluetooth 6.0", "5G"], a: 0, r: "FÜTÜRİST" },
+            { t: "Bir görselin yapay zeka ile üretildiğini en iyi nereden anlarsın?", o: ["Renklerinden", "Eller/Parmak Hatalarından", "Dosya Boyutundan"], a: 1, r: "GÖRSEL UZMANI" },
+            { t: "ChatGPT gibi sistemler hangi kategoriye girer?", o: ["Generative AI (Üretken)", "Analytical AI", "Robotics"], a: 0, r: "ARAŞTIRMACI" },
+            { t: "Black Box (Kara Kutu) problemi nedir?", o: ["Uçak kayıtları", "AI'ın kararı nasıl verdiğini bilemememiz", "Sunucu hatası"], a: 1, r: "ŞEFFAFLIK" }
+        ];
+
+        function initQuiz() {
+            GAME.qIdx = 0;
+            GAME.hp = 100;
+            GAME.score.quiz = 0;
+            loadQuestion();
+            speak("Simülasyon Başlıyor. Bütünlüğünü koru.");
+        }
+
+        function loadQuestion() {
+            if(GAME.qIdx >= questions.length) {
+                showScreen('arcade');
+                return;
+            }
+            const q = questions[GAME.qIdx];
+            document.getElementById('hud-name').innerText = GAME.name;
+            document.getElementById('q-idx').innerText = GAME.qIdx + 1;
+            document.getElementById('q-text').innerText = q.t;
+            document.getElementById('q-role').innerText = q.r;
+            
+            [0,1,2].forEach(i => {
+                const btn = document.getElementById(`opt-${i}`);
+                btn.innerText = `> ${q.o[i]}`;
+                btn.disabled = false;
+                btn.className = "pixel-box p-4 text-left readable-text hover:bg-[#111] transition-colors border-2 border-green-900 text-green-300 active:bg-green-900";
+            });
+            speak(q.t);
+        }
+
+        function answer(choice) {
+            const q = questions[GAME.qIdx];
+            const btn = document.getElementById(`opt-${choice}`);
+            
+            if(choice === q.a) {
+                // Correct
+                playSound('correct');
+                GAME.score.quiz += 10;
+                btn.className = "pixel-box p-4 text-left readable-text bg-green-900 border-2 border-green-500 text-white";
+                setTimeout(() => {
+                    GAME.qIdx++;
+                    loadQuestion();
+                }, 500);
+            } else {
+                // Wrong
+                playSound('wrong');
+                triggerStatic();
+                GAME.hp -= DIFFICULTY[GAME.difficulty].hpLoss;
+                updateHp();
+                btn.className = "pixel-box p-4 text-left readable-text bg-red-900 border-2 border-red-500 text-white";
+                btn.disabled = true; // Lock this option
+                
+                if(GAME.hp <= 0) {
+                    alert("SİSTEM ÇÖKTÜ. YENİDEN BAŞLATILIYOR.");
+                    location.reload();
+                }
+            }
+        }
+
+        function updateHp() {
+            const bar = document.getElementById('hp-bar');
+            bar.style.width = `${Math.max(0, GAME.hp)}%`;
+            document.getElementById('hp-val').innerText = `${Math.max(0, GAME.hp)}%`;
+            if(GAME.hp < 40) bar.classList.replace('bg-green-500', 'bg-red-500');
+        }
+
+        function triggerStatic() {
+            const el = document.getElementById('static-fx');
+            el.classList.add('static-hit');
+            setTimeout(() => el.classList.remove('static-hit'), 300);
+        }
+
+        /* --- PHASE 3: ARCADE (DATA RUNNER) --- */
+        let arcadeLoop;
+        const cvs = document.getElementById('gameCanvas');
+        const ctx = cvs.getContext('2d');
+        let player = { x: 50, y: 200, w: 30, h: 20, dy: 0, grounded: true };
+        let obstacles = [];
+        let coins = []; // Blue Data Packets
+        let frame = 0;
+        let speed = 5;
+        let collected = 0;
+
+        function startArcade() {
+            document.getElementById('arcade-start-overlay').classList.add('hidden');
+            speak("Veri koşusu başladı. Mavi paketleri topla.");
+            
+            // Reset
+            player.y = 200; player.dy = 0;
+            obstacles = []; coins = [];
+            collected = 0; frame = 0;
+            speed = DIFFICULTY[GAME.difficulty].arcadeSpeed;
+            
+            // Events
+            cvs.addEventListener('pointerdown', jump);
+            document.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
+            
+            arcadeLoop = requestAnimationFrame(updateArcade);
+        }
+
+        function jump() {
+            if(player.grounded) {
+                player.dy = -12; // Jump force
+                player.grounded = false;
+                playSound('jump');
+                vibrate(50);
+            }
+        }
+
+        function updateArcade() {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0,0,400,300); // Clear
+
+            // Draw Floor
+            ctx.fillStyle = "#0f0";
+            ctx.fillRect(0, 250, 400, 2);
+
+            // Physics
+            player.dy += 0.8; // Gravity
+            player.y += player.dy;
+            if(player.y > 230) { player.y = 230; player.dy = 0; player.grounded = true; }
+
+            // Draw Player (UFO)
+            ctx.fillStyle = "#0f0";
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+            ctx.fillStyle = "#0ff"; // Dome
+            ctx.beginPath(); ctx.arc(player.x + 15, player.y, 8, Math.PI, 0); ctx.fill();
+
+            // Spawn Logic
+            if(frame % 90 === 0) {
+                // Obstacle (Red Wall)
+                let h = Math.random() > 0.5 ? 40 : 25;
+                obstacles.push({ x: 400, y: 250 - h, w: 20, h: h, active: true });
+            }
+            if(frame % 130 === 0) {
+                // Coin (Blue Data)
+                coins.push({ x: 400, y: 150 + Math.random()*50, w: 15, h: 15, active: true });
+            }
+
+            // Update Obstacles
+            ctx.fillStyle = "#f00";
+            obstacles.forEach(o => {
+                o.x -= speed;
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+                // Collision
+                if(player.x < o.x + o.w && player.x + player.w > o.x &&
+                   player.y < o.y + o.h && player.y + player.h > o.y) {
+                    if(o.active) {
+                        playSound('hit');
+                        GAME.hp -= 5; // Small penalty
+                        o.active = false; // hit once
+                    }
+                }
+            });
+
+            // Update Coins
+            ctx.fillStyle = "#0ff";
+            coins.forEach(c => {
+                c.x -= speed;
+                if(c.active) {
+                    ctx.beginPath(); ctx.arc(c.x + 7, c.y + 7, 7, 0, Math.PI*2); ctx.fill();
+                    // Collect
+                    if(player.x < c.x + c.w && player.x + player.w > c.x &&
+                       player.y < c.y + c.h && player.y + player.h > c.y) {
+                        playSound('collect');
+                        collected++;
+                        c.active = false;
+                        document.getElementById('arcade-score').innerText = collected;
+                    }
+                }
+            });
+
+            frame++;
+            if(collected >= DIFFICULTY[GAME.difficulty].arcadeGoal) {
+                // Win Arcade
+                cancelAnimationFrame(arcadeLoop);
+                GAME.score.arcade = 50; // Max points for arcade completion
+                ctx.fillStyle = "#0f0";
+                ctx.font = "30px monospace";
+                ctx.fillText("BAŞARILI!", 130, 150);
+                setTimeout(() => {
+                    showScreen('match');
+                    initMatch();
+                }, 1500);
+            } else if(GAME.hp <= 0) {
+                 alert("SİSTEM ÇÖKTÜ.");
+                 location.reload();
+            } else {
+                requestAnimationFrame(updateArcade);
+            }
+        }
+
+        /* --- PHASE 4: MATCHING --- */
+        const matchPairs = [
+            { id: 1, t: "NLP", d: "Doğal Dil İşleme" },
+            { id: 2, t: "Dataset", d: "Eğitim Verisi" },
+            { id: 3, t: "GPU", d: "AI İşlemcisi" },
+            { id: 4, t: "Turing Test", d: "Zeka Testi" }
+        ];
+        let selectedItem = null;
+        let matchesFound = 0;
+
+        function initMatch() {
+            speak("Son aşama. Bağlantıları kur.");
+            const area = document.getElementById('match-area');
+            const items = [];
+            
+            matchPairs.forEach(p => {
+                items.push({ id: p.id, txt: p.t, type: 'term' });
+                items.push({ id: p.id, txt: p.d, type: 'def' });
+            });
+            
+            // Shuffle
+            items.sort(() => Math.random() - 0.5);
+
+            items.forEach(item => {
+                const el = document.createElement('div');
+                el.className = `match-card ${item.type === 'term' ? 'text-green-400' : 'text-blue-400'}`;
+                el.innerText = item.txt;
+                el.onclick = () => handleMatch(el, item.id);
+                area.appendChild(el);
+            });
+        }
+
+        function handleMatch(el, id) {
+            if(el.classList.contains('matched')) return;
+
+            if(!selectedItem) {
+                selectedItem = { el, id };
+                el.classList.add('selected');
+                playSound('jump');
+            } else {
+                if(selectedItem.el === el) return; // same click
+
+                if(selectedItem.id === id) {
+                    // Match
+                    playSound('correct');
+                    el.classList.add('matched');
+                    selectedItem.el.classList.add('matched');
+                    GAME.score.match += 10;
+                    matchesFound++;
+                    if(matchesFound === 4) setTimeout(endGame, 1000);
+                } else {
+                    // Wrong
+                    playSound('wrong');
+                    el.classList.add('wrong');
+                    selectedItem.el.classList.add('wrong');
+                    setTimeout(() => {
+                        el.classList.remove('wrong');
+                        selectedItem.el.classList.remove('wrong', 'selected');
+                        selectedItem = null;
+                    }, 500);
+                    return; // Don't clear selectedItem immediately above
+                }
+                selectedItem = null;
+            }
+        }
+
+        /* --- PHASE 5: END GAME --- */
+        function endGame() {
+            showScreen('cert');
+            
+            // Calculate Final Percentage Weighted
+            // Quiz: 100pts, Arcade: 50pts, Match: 40pts = Total 190
+            const totalScore = GAME.score.quiz + GAME.score.arcade + GAME.score.match;
+            const maxPossible = 190;
+            const percentage = Math.round((totalScore / maxPossible) * 100);
+
+            let rank = "STAJYER";
+            let msg = "Sistem erişimi kısıtlandı. Daha fazla eğitim gerekli.";
+            
+            if(percentage >= 95) { rank = "TECHNO-GOD"; msg = "Sistem sizinle birleşti. Kusursuz uyum."; }
+            else if(percentage >= 80) { rank = "BAŞ MİMAR"; msg = "Yüksek düzeyde yönetim becerisi."; }
+            else if(percentage >= 60) { rank = "OPERATÖR"; msg = "Standart protokoller uygulandı."; }
+
+            document.getElementById('cert-name').innerText = GAME.name;
+            document.getElementById('cert-score').innerText = `%${percentage}`;
+            document.getElementById('cert-rank').innerText = rank;
+            document.getElementById('cert-msg').innerText = msg;
+            document.getElementById('cert-hash').innerText = Math.random().toString(36).substr(2, 9).toUpperCase();
+
+            speak(`Tebrikler ${GAME.name}. Rütbeniz: ${rank}.`);
+        }
+    </script>
+</body>
+</html>
